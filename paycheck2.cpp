@@ -278,6 +278,7 @@ private:
       return true;
     }
 
+    couter = 999999999;
     return false;
   }
 

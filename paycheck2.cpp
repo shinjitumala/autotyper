@@ -9,6 +9,8 @@
 #include <windows.h>
 #include <iostream>
 #include <queue>
+#include <chrono>
+#include <ctime>
 using namespace std;
 
 bool debug;
@@ -48,6 +50,7 @@ public:
    * bool return value: returns false if failed. otherwise returns true
    */
   bool sendToWindow(){
+    if(messageQueue.empty()) return true; // do nothing if queue is empty.
     bool ret = ActivateWindow(windowName);
     if(ret){ // if success.
       while(!messageQueue.empty()){
@@ -81,7 +84,10 @@ private:
         sendKey(109, false);
       }else if('0' <= s[i] && '9' >= s[i]){
         sendKey(s[i], false);
+      }else if('\0' == s[i]){
+        // do nothing.
       }else{
+        cout << "MessageSender() >> invalid character: " << s[i] <<". skipped." << endl;
       }
 
       Sleep(inputDelay);
@@ -130,8 +136,6 @@ private:
     HWND window = GetForegroundWindow();
     int length = GetWindowText(window, wnd_title, sizeof(wnd_title));
     if(length == 0) return "";
-
-    cout << wnd_title << endl;
     return wnd_title;
   }
 
@@ -151,35 +155,164 @@ private:
       currentWindow = GetForegroundWindowName();
       if(firstWindow == currentWindow) return false;
     }
-    cout << currentWindow << endl;
     return true;
   }
 };
 
 /**
- * Keeps track of a string to be send on schedule.
+ * A data structure to take care of the weekly schedule.
  */
 class Schedule{
+  bool schedule_table[7][24 * 4]; // if this is set to true it means that the WordHandler will send messages to the window.
+
+public:
+  /**
+   * Constructor
+   */
+  Schedule(){
+    for(int i = 0; i < 7; i++){
+      for(int j = 0; j < 24 * 4; j++){
+        schedule_table[i][j] = false; // default is false. meaning no sending messages.
+      }
+    }
+  }
+
+  /**
+   * Sets schedule.
+   * int week: 0 = Mon, 1 = Tue, ... , 6 = Sun
+   * int time: 0:00 - 0:14 = 0, 0:15 - 0:29 = 1, ... , 23:45 - 23:59 = 23 * 4
+   * bool value: the value to set the schedule.
+   */
+  void setSchedule(int week, int time_frame, bool value){
+    schedule_table[week][time_frame] = value;
+  }
+
+  /**
+   * Gets schedule.
+   * int week: 0 = Sun, 1 = Mon, ... , 6 = Sat
+   * int time: 0:00 - 0:14 = 0, 0:15 - 0:29 = 1, ... , 23:45 - 23:59 = 23 * 4
+   * bool return value: the value of the schedule.
+   */
+  bool getSchedule(int week, int time_frame){
+    return schedule_table[week][time_frame];
+  }
 
 };
 
 class WordHandler{
-  string message;
+  string message; // the message to be sent.
+  Schedule *m_schedule; // message sending schedule.
+  MessageSender *messanger; // messanger for the window.
+  int interval; // message interval. in milliseconds. 300000 for 5 mins.
+  int counter; // used to count how much time is left for the next message.
+  tm previous; // used to store the tm when the previous call happened.
 
 public:
-  void update(){
+  /**
+   * Constructor
+   */
+  WordHandler(string s, Schedule *t_schedule, MessageSender *ms_tmp, int t_interval){
+    message = s;
+    m_schedule = t_schedule;
+    messanger = ms_tmp;
+    interval = t_interval;
+    counter = 0;
 
+  }
+
+  /**
+   * Takes tm of the current time. Then queues a message to the messageSender() if current time in schedule is true.
+   * tm *time_tm: the tm for the current time. Can be taken from Timer().
+   */
+  void update(tm *time_tm){
+    if((*m_schedule).getSchedule(time_tm->tm_wday, 4 * time_tm->tm_hour + time_tm->tm_min / 15)){
+      if(CheckInterval(time_tm)){
+        (*messanger).queueMessage(message);
+      }
+    }
+
+    previous = *time_tm;
+  }
+
+private:
+  bool CheckInterval(tm *time_tm){
+    int d_day = ((time_tm->tm_wday - (&previous)->tm_wday) % 7 + 7) % 7;
+    int d_hour = ((time_tm->tm_hour - (&previous)->tm_hour) % 24 + 24) % 24;
+    int d_min = ((time_tm->tm_min - (&previous)->tm_min) % 60 + 60) % 60;
+    int d_sec = ((time_tm->tm_sec - (&previous)->tm_sec) % 60 + 60 % 60);
+
+    counter += d_day * 86400000 + d_hour * 3600000 + d_min * 60000 + d_sec * 1000;
+    cout << "counter: " << counter << endl;
+
+    if(counter > interval){
+      counter = 0;
+      return true;
+    }
+
+    return false;
+   }
+};
+
+class Timer{
+  time_t now_c;
+  int wait_time; // the time to wait between updates. in milliseconds. recommended to set it above 60000 (60 sec).
+
+public:
+  /**
+   * Constructor
+   */
+  Timer(int wait){
+    update();
+    wait_time = wait;
+  }
+
+  /**
+   * Get the tm for the current time.
+   * tm return value: the tm of the current time.
+   */
+  tm *getTM(){
+    update();
+    return localtime(&now_c);
+  }
+
+  /**
+   * Waits until the next update cycle.
+   */
+  void waitNext(){
+    Sleep(wait_time);
+  }
+private:
+  /**
+   * Updates the time with the current time.
+   */
+  void update(){
+    now_c = chrono::system_clock::to_time_t(chrono::system_clock::now());
   }
 };
 
 int main(int argc, char *argv[]){
   debug = true;
   Sleep(1000);
-  MessageSender one(300, 16, "Discord");
+  MessageSender one = MessageSender(300, 16, "Discord");
+  Timer t_new = Timer(2000);
+  Schedule tmp = Schedule();
+  tmp.setSchedule(4, 5, true);
+
+  WordHandler hoge = WordHandler("bobo\n", &tmp, &one, 5000);
+
+  hoge.update(t_new.getTM());
+  for(int i = 0; i < 5; i++){
+    t_new.waitNext();
+    hoge.update(t_new.getTM());
+    one.sendToWindow();
+  }
+  /*
+
   one.queueMessage("GAGO\n");
   one.queueMessage("$paycheck\n");
   one.queueMessage("penis\n");
   bool status = one.sendToWindow();
   cout << status << endl;
+  */
   return 0;
 }

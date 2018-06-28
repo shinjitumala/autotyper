@@ -278,7 +278,7 @@ private:
       return true;
     }
 
-    couter = 999999999;
+    counter = 999999999;
     return false;
   }
 

@@ -12,9 +12,18 @@
 #include <chrono>
 #include <ctime>
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <list>
+#include <unordered_map>
 using namespace std;
 
-bool debug;
+#define LOG(x) if(debug) {cerr << x << endl;};
+
+bool debug = false;
+int delay = 150;
+int maxWindows = 16;
+int UpdateInterval = 3000;
 
 /**
  * Keeps a string queue to be send to a specific window.
@@ -32,6 +41,7 @@ public:
    * Constructor
    */
   MessageSender(int delay, int maxW, string WName){
+    LOG("MessageSender >> new, id: " << this);
     inputDelay = delay; // in milliseconds
     MaxWindows = maxW;
     windowName = WName;
@@ -42,6 +52,7 @@ public:
    * string s: the string that is to be queued. (*WARNING*: read method sendString() for details.)
    */
   void queueMessage(string s){
+    LOG("MessageSender >> queueMessage(), Window: " << windowName << ", String: " << s << ", id: " << this);
     messageQueue.push(s);
   }
 
@@ -51,6 +62,7 @@ public:
    * bool return value: returns false if failed. otherwise returns true
    */
   bool sendToWindow(){
+    LOG("MessageSender >> sendToWindow(), Window: " << windowName << ", id: " << this);
     if(messageQueue.empty()) return true; // do nothing if queue is empty.
     bool ret = ActivateWindow(windowName);
     if(ret){ // if success.
@@ -60,6 +72,8 @@ public:
         messageQueue.pop();
       }
       Sleep(inputDelay);
+    }else{
+      LOG("MessageSender >> sendToWindow() not found, Window: " << windowName << ", id: " << this);
     }
     ActivateWindow("paycheck.exe");
     return ret;
@@ -77,7 +91,7 @@ private:
         sendKey(s[i] - 32, false);
       }else if('A' <= s[i] && 'Z' >= s[i]){
         sendKey(s[i], true);
-      }else if(s[i] == '\n'){ // '\n' acts as enter key.
+      }else if(s[i] == ';'){ // ';' acts as enter key.
         sendKey(13, false);
       }else if('$' == s[i]){
         sendKey(52, true);
@@ -87,8 +101,10 @@ private:
         sendKey(s[i], false);
       }else if('\0' == s[i]){
         // do nothing.
+      }else if('\'' == s[i]){ // ' acts as space.
+        sendKey(32, false);
       }else{
-        cout << "MessageSender() >> invalid character: " << s[i] <<". skipped." << endl;
+        LOG("MessageSender() >> invalid character: " << s[i] <<". skipped.");
       }
 
       Sleep(inputDelay);
@@ -225,6 +241,8 @@ public:
     interval_min = t_interval1;
     interval_max = t_interval2;
     counter = 0;
+    time_t now_c = chrono::system_clock::to_time_t(chrono::system_clock::now());
+    previous = *localtime(&now_c);
     SetNextCounter();
   }
 
@@ -233,6 +251,7 @@ public:
    * tm *time_tm: the tm for the current time. Can be taken from Timer().
    */
   void update(tm *time_tm){
+    LOG("WordHandler >> update(), id: " << this);
     if((*m_schedule).getSchedule(time_tm->tm_wday, 4 * time_tm->tm_hour + time_tm->tm_min / 15)){
       if(CheckInterval(time_tm)){
         (*messanger).queueMessage(message);
@@ -250,7 +269,7 @@ private:
     int d_sec = ((time_tm->tm_sec - (&previous)->tm_sec) % 60 + 60 % 60);
 
     counter += d_day * 86400000 + d_hour * 3600000 + d_min * 60000 + d_sec * 1000;
-    cout << "counter: " << counter << endl;
+    LOG("counter: " << counter);
 
     if(counter > next_counter){
       counter = 0;
@@ -311,32 +330,164 @@ private:
  * After setting them up, will create a Timer and begin the operation.
  */
 class initializer{
+  list<WordHandler> WH_list; // list of WordHandlers. Each message has one.
+  list<MessageSender> MS_list; // list of MessageSenders. Each target window name has one.
+  unordered_map<string, MessageSender *> MS_map; // map for window name and MessageSender.
 
+public:
+  void begin(){
+    openSettings("settings.txt");
+    Timer timer_clock = Timer(UpdateInterval);
+    while(true){
+      timer_clock.waitNext();
+      for(list<WordHandler>::iterator itr = WH_list.begin(); itr != WH_list.end(); itr++){
+        (*itr).update(timer_clock.getTM());
+      }
+      for(list<MessageSender>::iterator itr = MS_list.begin(); itr != MS_list.end(); itr++){
+        (*itr).sendToWindow();
+      }
+    }
+  }
+
+private:
+  /*
+   * Opens file to interpret it as a setting file for this program.
+   * string path: settings file path.
+   */
+  void openSettings(string path){
+    string line;
+    ifstream settings (path);
+    if(settings.is_open()){
+      Schedule *current_schedule = NULL;
+      int current_wday = -1;
+      while(getline(settings, line)){
+        if(!(line[0] == '/' && line[1] == '/') || line[0] == '\n'){// skips line if it starts with "//" or "\n".
+          switch(line[0]){
+            case '>':
+              current_schedule = new Schedule();
+              newWord(line, current_schedule);
+              break;
+            case '+':
+              current_wday = getDay(line);
+              break;
+            case '=':
+              setTime(line, current_wday, current_schedule);
+              break;
+            default:
+              LOG("initializer >> unknown line. Skipping...");
+              break;
+          }
+        }
+      }
+      settings.close();
+    }else{
+      cout << "initializer() >> unable to open settings file. Closing program..." << endl;
+      Sleep(5000);
+      exit(1);
+    }
+  }
+
+  /**
+   * Reads the given line to create a WordHandler and MessageSender if needed.
+   * string line: given line.
+   * Schedule *current_schedule: the schedule that is going to be given to the WordHandler.
+   */
+  void newWord(string line, Schedule *current_schedule){
+    stringstream ss(line);
+    string dummy, msg, wnd;
+    int min, max;
+    ss >> dummy >> msg >> wnd >> min >> max;
+    MessageSender *t_MS = findMS(wnd);
+    WH_list.push_back(WordHandler(msg, current_schedule, t_MS, min, max));
+  }
+
+  /**
+   * Finds the MessageSender with the same title. If there is none, will create a new one.
+   * string name: title of the window to search. will act as the key to the hashtable.
+   * Also adds the new MessageSender to MS_list.
+   * MessangeSender *return value: the pointer of the responsible MessageSender.
+   */
+  MessageSender *findMS(string name){
+    MessageSender* ret;
+    try{
+      ret = MS_map.at(name);
+      LOG("initializer >> findMS(). found: " << ret);
+    }catch(out_of_range&){
+      MessageSender *new_MS = new MessageSender(delay, maxWindows, name);
+      MS_list.push_front(*new_MS);
+      auto itr = MS_list.begin();
+      MessageSender *tmp = &*itr;
+      MS_map.emplace(name, tmp);
+      ret = tmp;
+      LOG("initializer >> findMS(). created: " << ret);
+    }
+
+    return ret;
+  }
+
+  /**
+   * Reads the given line to modify the given schedule accordingly.
+   * string line: given line.
+   * Schedule *schedule: the schedule to be modified.
+   */
+  void setTime(string line, int wday, Schedule *schedule){
+    if(wday == -1 || schedule == NULL) error();
+    stringstream ss(line);
+    int s_h, s_m, e_h, e_m;
+    char dummy;
+    ss >> dummy >> s_h >> dummy >> s_m >> dummy >> e_h >> dummy >> e_m;
+    s_h = s_h % 24; e_h = e_h % 24; s_m = s_m / 15 * 15; e_m = e_m / 15 * 15;
+
+    int start, end;
+    start = s_h * 4 + s_m / 15; end = e_h * 4 + e_m / 15;
+    for(int i = start; i < end; i++){
+      (*schedule).setSchedule(wday, i, true);
+    }
+  }
+
+  /**
+   * Reads the given line to return the tm_wday vaule of the line.
+   * string line: given line.
+   * int return value: corresponding tm_wday value.
+   */
+  int getDay(string line){
+    if(line == "+ Su"){
+      return 0;
+    }else if(line == "+ Mo"){
+      return 1;
+    }else if(line == "+ Tu"){
+      return 2;
+    }else if(line == "+ We"){
+      return 3;
+    }else if(line == "+ Th"){
+      return 4;
+    }else if(line == "+ Fr"){
+      return 5;
+    }else if(line == "+ Sa"){
+      return 6;
+    }else{
+      cout << "initializer >> error at line: \"" << line << "\". Closing program..." << endl;
+      Sleep(5000);
+      exit(1);
+      return -1;
+    }
+  }
+  /**
+   * Call this to exit the program when a error occurs while reading settings.txt.
+   */
+  void error(){
+    cout << "initializer >> fatal error. Closing program..." << endl;
+    Sleep(5000);
+    exit(1);
+  }
 };
 
 int main(int argc, char *argv[]){
-  debug = true;
+  debug = false;
   Sleep(1000);
-  MessageSender one = MessageSender(300, 16, "Discord");
-  Timer t_new = Timer(2000);
-  Schedule tmp = Schedule();
-  tmp.setSchedule(4, 42, true);
 
-  WordHandler hoge = WordHandler("bobo\n", &tmp, &one, 5000, 10000);
+  initializer test = initializer();
+  test.begin();
 
-  hoge.update(t_new.getTM());
-  for(int i = 0; i < 5; i++){
-    t_new.waitNext();
-    hoge.update(t_new.getTM());
-    one.sendToWindow();
-  }
-  /*
-
-  one.queueMessage("GAGO\n");
-  one.queueMessage("$paycheck\n");
-  one.queueMessage("penis\n");
-  bool status = one.sendToWindow();
-  cout << status << endl;
-  */
   return 0;
 }

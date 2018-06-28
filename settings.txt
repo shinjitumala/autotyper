@@ -1,13 +1,39 @@
-/**
- *
- */
-
- >> $paycheck Discord
- + Mo
- 7 : 00 - 8 : 00
- + Tu
- + We
- + Th
- + Fr
- + Sa
- + Su
+//--------------
+// Global Settings
+//--------------
+G_InputDelay = 150; // The input delay between keystrokes in milliseconds. You may want to increase this if you have a slow computer. Default: 150
+G_MaxWindows = 16; // The maximum windows that the program will search for. Program won't run properly if you have more windows open than this count. Default: 16
+G_UpdateInterval = 10000; // The time between updates for this program in milliseconds. Longer interval means less resource (aka CPU power) usage. Shouldn't matter too much as long as it is set above 5 seconds. Default: 10000
+//--------------
+// Schedule template
+//--------------
+//> $paycheck Discord 300000 6000000 // > "message to be sent" "window name" "min_interval" "max_interval" intervals are in milliseconds.
+//+ Mo // Below will be the schedule for this day of the week.
+//=   7:00 - 8:00 // "start time" - "end time" in 15 minute increments. Although the program will auto correct it if its not on 15 minute increments.
+> Hello'I'became'a'bot'This'is'an'automated'message; Discord 3600000 5400000
++ Mo
+=   7:00 - 8:00
+=   9:15 - 10:45
+=   11:05 - 12:22
++ Tu
++ We
++ Th
+=   23:00 - 23:45
++ Fr
+=   0:00 - 7:00
++ Sa
++ Su
+> bobo; Discord 300000 700000
++ Mo
+=   7:00 - 8:00
+=   9:15 - 10:45
+=   11:05 - 12:22
++ Tu
++ We
++ Th
+=   23:00 - 23:45
++ Fr
+=   0:00 - 7:00
+=   7:45 - 8:15
++ Sa
++ Su

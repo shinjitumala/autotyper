@@ -1,0 +1,13 @@
+/**
+ *
+ */
+
+ >> $paycheck Discord
+ + Mo
+ 7 : 00 - 8 : 00
+ + Tu
+ + We
+ + Th
+ + Fr
+ + Sa
+ + Su

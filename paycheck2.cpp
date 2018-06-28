@@ -11,6 +11,7 @@
 #include <queue>
 #include <chrono>
 #include <ctime>
+#include <cstdlib>
 using namespace std;
 
 bool debug;
@@ -199,25 +200,32 @@ public:
 
 };
 
+/*
+ * Will update when a tm is sent to it then if it is an appropriate time to send
+ * a message then it will queue a message using a MessageSender.
+ */
 class WordHandler{
   string message; // the message to be sent.
   Schedule *m_schedule; // message sending schedule.
   MessageSender *messanger; // messanger for the window.
-  int interval; // message interval. in milliseconds. 300000 for 5 mins.
+  int interval_min; // minimum message interval. in milliseconds. 300000 for 5 mins.
+  int interval_max; // maximum message interval. in milliseconds. 300000 for 5 mins.
   int counter; // used to count how much time is left for the next message.
+  int next_counter; // the randomly generated interval.
   tm previous; // used to store the tm when the previous call happened.
 
 public:
   /**
    * Constructor
    */
-  WordHandler(string s, Schedule *t_schedule, MessageSender *ms_tmp, int t_interval){
+  WordHandler(string s, Schedule *t_schedule, MessageSender *ms_tmp, int t_interval1, int t_interval2){
     message = s;
     m_schedule = t_schedule;
     messanger = ms_tmp;
-    interval = t_interval;
+    interval_min = t_interval1;
+    interval_max = t_interval2;
     counter = 0;
-
+    SetNextCounter();
   }
 
   /**
@@ -244,15 +252,23 @@ private:
     counter += d_day * 86400000 + d_hour * 3600000 + d_min * 60000 + d_sec * 1000;
     cout << "counter: " << counter << endl;
 
-    if(counter > interval){
+    if(counter > next_counter){
       counter = 0;
+      SetNextCounter();
       return true;
     }
 
     return false;
-   }
+  }
+
+  void SetNextCounter(){
+    next_counter = interval_min + rand() % (interval_max - interval_min);
+  }
 };
 
+/**
+ * Acts as the central control for all update operations.
+ */
 class Timer{
   time_t now_c;
   int wait_time; // the time to wait between updates. in milliseconds. recommended to set it above 60000 (60 sec).
@@ -290,15 +306,23 @@ private:
   }
 };
 
+/*
+ * Will open settings.txt to interpret it and set up all MessageSender, WordHandler
+ * After setting them up, will create a Timer and begin the operation.
+ */
+class initializer{
+
+};
+
 int main(int argc, char *argv[]){
   debug = true;
   Sleep(1000);
   MessageSender one = MessageSender(300, 16, "Discord");
   Timer t_new = Timer(2000);
   Schedule tmp = Schedule();
-  tmp.setSchedule(4, 5, true);
+  tmp.setSchedule(4, 42, true);
 
-  WordHandler hoge = WordHandler("bobo\n", &tmp, &one, 5000);
+  WordHandler hoge = WordHandler("bobo\n", &tmp, &one, 5000, 10000);
 
   hoge.update(t_new.getTM());
   for(int i = 0; i < 5; i++){

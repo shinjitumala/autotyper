@@ -257,6 +257,8 @@ public:
       if(CheckInterval(time_tm)){
         (*messanger).queueMessage(message);
       }
+    }else{
+      couter = 99999999; // resets timer when schedule is over.
     }
 
     previous = *time_tm;
@@ -278,7 +280,6 @@ private:
       return true;
     }
 
-    counter = 999999999;
     return false;
   }
 

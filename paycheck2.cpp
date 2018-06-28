@@ -258,7 +258,7 @@ public:
         (*messanger).queueMessage(message);
       }
     }else{
-      couter = 99999999; // resets timer when schedule is over.
+      counter = 99999999; // resets timer when schedule is over.
     }
 
     previous = *time_tm;

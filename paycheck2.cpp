@@ -18,12 +18,13 @@
 #include <unordered_map>
 using namespace std;
 
-#define LOG(x) if(debug) {cerr << x << endl;};
+#define LOG(x) if(DEBUG) {cerr << x << endl;};
 
-bool debug = false;
-int delay = 150;
-int maxWindows = 16;
-int UpdateInterval = 3000;
+bool DEBUG = false;
+int DELAY = 150;
+int MAX_WINDOWS = 16;
+int UPDATE_INTERVAL = 10000;
+string SETTINGS_PATH = "settings.txt";
 
 /**
  * Keeps a string queue to be send to a specific window.
@@ -240,7 +241,7 @@ public:
     messanger = ms_tmp;
     interval_min = t_interval1;
     interval_max = t_interval2;
-    counter = 0;
+    counter = 999999999;
     time_t now_c = chrono::system_clock::to_time_t(chrono::system_clock::now());
     previous = *localtime(&now_c);
     SetNextCounter();
@@ -269,7 +270,7 @@ private:
     int d_sec = ((time_tm->tm_sec - (&previous)->tm_sec) % 60 + 60 % 60);
 
     counter += d_day * 86400000 + d_hour * 3600000 + d_min * 60000 + d_sec * 1000;
-    LOG("counter: " << counter);
+    LOG("WordHandler >> counter: " << counter<< ", id: " << this);
 
     if(counter > next_counter){
       counter = 0;
@@ -336,8 +337,8 @@ class initializer{
 
 public:
   void begin(){
-    openSettings("settings.txt");
-    Timer timer_clock = Timer(UpdateInterval);
+    openSettings(SETTINGS_PATH);
+    Timer timer_clock = Timer(UPDATE_INTERVAL);
     while(true){
       timer_clock.waitNext();
       for(list<WordHandler>::iterator itr = WH_list.begin(); itr != WH_list.end(); itr++){
@@ -373,6 +374,9 @@ private:
             case '=':
               setTime(line, current_wday, current_schedule);
               break;
+            case 'G':
+              setGlobal(line);
+              break;
             default:
               LOG("initializer >> unknown line. Skipping...");
               break;
@@ -381,9 +385,28 @@ private:
       }
       settings.close();
     }else{
-      cout << "initializer() >> unable to open settings file. Closing program..." << endl;
+      LOG("initializer() >> unable to open settings file. Closing program...");
       Sleep(5000);
       exit(1);
+    }
+  }
+
+  /**
+   * Reads the given line to change the global variables.
+   * string line: given line.
+   */
+  void setGlobal(string line){
+    stringstream ss(line);
+    char dummy;
+    string str;
+    int arg;
+    ss >> str >> dummy >> arg;
+    if(str == "G_InputDelay"){
+      DELAY = arg;
+    }else if (str == "G_MaxWindows"){
+      MAX_WINDOWS = arg;
+    }else if(str == "G_UpdateInterval"){
+      UPDATE_INTERVAL = arg;
     }
   }
 
@@ -413,7 +436,7 @@ private:
       ret = MS_map.at(name);
       LOG("initializer >> findMS(). found: " << ret);
     }catch(out_of_range&){
-      MessageSender *new_MS = new MessageSender(delay, maxWindows, name);
+      MessageSender *new_MS = new MessageSender(DELAY, MAX_WINDOWS, name);
       MS_list.push_front(*new_MS);
       auto itr = MS_list.begin();
       MessageSender *tmp = &*itr;
@@ -466,7 +489,7 @@ private:
     }else if(line == "+ Sa"){
       return 6;
     }else{
-      cout << "initializer >> error at line: \"" << line << "\". Closing program..." << endl;
+      LOG("initializer >> error at line: \"" << line << "\". Closing program...");
       Sleep(5000);
       exit(1);
       return -1;
@@ -476,15 +499,26 @@ private:
    * Call this to exit the program when a error occurs while reading settings.txt.
    */
   void error(){
-    cout << "initializer >> fatal error. Closing program..." << endl;
+    LOG("initializer >> fatal error. Closing program...");
     Sleep(5000);
     exit(1);
   }
 };
 
 int main(int argc, char *argv[]){
-  debug = false;
-  Sleep(1000);
+  cout << "paycheck.exe is running..." << endl;
+  cout << "closing this during a alt tab operation is dangerous." << endl;
+  cout << "otherwise feel free to close this window or press \"Ctrl + C\" to stop anytime." << endl;
+  if(argc > 1){
+    for(int i = 1; i < argc; i++){
+      if(strcmp(argv[i], "-d") == 0){
+        DEBUG = true;
+        LOG("STARTED ON DEBUG MODE...");
+      }else{
+        SETTINGS_PATH = argv[i];
+      }
+    }
+  }
 
   initializer test = initializer();
   test.begin();

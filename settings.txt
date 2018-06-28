@@ -21,6 +21,8 @@ G_UpdateInterval = 10000; // The time between updates for this program in millis
 =   23:00 - 23:45
 + Fr
 =   0:00 - 7:00
+=   8:30 - 9:00
+=   10:30 - 11:00
 + Sa
 + Su
 > bobo; Discord 300000 700000
@@ -33,7 +35,7 @@ G_UpdateInterval = 10000; // The time between updates for this program in millis
 + Th
 =   23:00 - 23:45
 + Fr
-=   0:00 - 7:00
-=   7:45 - 8:15
+=   8:30 - 9:00
+=   10:30 - 11:00
 + Sa
 + Su
